@@ -1,4 +1,4 @@
-This is a Vivado project and script to generate utilization report for different combinations of generics.
+This is a Vivado project and script to generate utilization report for different combinations of generics. Tested in Vivado 2019.1
 
 1. Open the project
 2. In Vivado tcl console run:
