@@ -15,6 +15,10 @@ package fft_sim_pkg is
     end record;
     type cplx_vec is array(integer range <>) of cplx;
 
+    function real2slv(x: real; width: integer) return std_logic_vector;
+    function real2slv(x: real; width: integer; frac: integer) return std_logic_vector;
+    function slv2real(x: std_logic_vector) return real;
+    function slv2real(x: std_logic_vector; frac: integer) return real;
     function clog2(x: integer) return integer;
     function reverse(vec: std_logic_vector) return std_logic_vector;
     function reverse(num: integer; nbits: integer) return integer;
@@ -42,6 +46,81 @@ package fft_sim_pkg is
 end package fft_sim_pkg;
 
 package body fft_sim_pkg is
+
+    -- convert real to std_logic_vector
+    function real2slv(x: real; width: integer) return std_logic_vector is
+        variable tmp: real;
+        variable res: std_logic_vector(width-1 downto 0) := (others=>'0');
+        variable neg: boolean;
+    begin
+        if x < 0.0 then
+            neg := true;
+            tmp := floor(-x);
+        else
+            neg := false;
+            tmp := floor(x);
+        end if;
+        for k in 0 to width-1 loop
+            --report integer'image(k) & ": " & real'image(tmp) & "   " & real'image(tmp mod 2.0);
+            if (tmp mod 2.0) > 0.5 then
+                res(k) := '1';
+            else
+                res(k) := '0';
+            end if;
+            tmp := floor(tmp / 2.0);
+        end loop;
+        if neg then
+            res := (not res) + 1;
+        end if;
+        return res;
+    end function;
+    
+    function real2slv(x: real; width: integer; frac: integer) return std_logic_vector is
+    begin
+        return real2slv(round(x * 2.0**frac), width);
+    end function;
+
+    -- convert signed slv to real
+    function slv2real(x: std_logic_vector) return real is
+        variable res: real := 0.0;
+        variable xx: std_logic_vector(x'length-1 downto 0) := x;
+        variable neg: boolean := false;
+    begin
+        if xx(xx'left) = '1' then
+            neg := true;
+            xx := (not xx) + 1;
+        end if;
+        
+        for k in 0 to xx'length-1 loop
+            res := res + real(to_integer(unsigned(xx(k downto k)))) * 2.0**k;
+        end loop;
+        
+        if neg then
+            res := -res;
+        end if;
+        return res;
+    end function;
+    
+    -- convert signed fixed point slv to real
+    function slv2real(x: std_logic_vector; frac: integer) return real is
+        variable res: real := 0.0;
+        variable xx: std_logic_vector(x'length-1 downto 0) := x;
+        variable neg: boolean := false;
+    begin
+        if xx(xx'left) = '1' then
+            neg := true;
+            xx := (not xx) + 1;
+        end if;
+        
+        for k in 0 to xx'length-1 loop
+            res := res + real(to_integer(unsigned(xx(k downto k)))) * 2.0**k;
+        end loop;
+        
+        if neg then
+            res := -res;
+        end if;
+        return res / 2.0**frac;
+    end function;
 
     function clog2(x: integer) return integer is
     begin

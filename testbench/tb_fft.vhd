@@ -4,9 +4,7 @@ use ieee.std_logic_unsigned.all;
 use ieee.std_logic_arith.conv_std_logic_vector;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
-use work.utils_pkg.all;
 use work.fft_sim_pkg.all;
-use work.LD_package.all;
 library std;
 use std.env.finish;
 
@@ -84,12 +82,13 @@ architecture testbench of TB_fft is
     -----------------------------------------------------------
     -----------------------------------------------------------
     constant DataWidth: integer := 16;
-    constant FFTlen: integer := 16;
+    constant FFTlen: integer := 1024;
     constant TwiddleWidth: integer := 18;
     constant BitReversedInput: integer := 1;
+    constant InvCtrl: integer := 1;    -- 0 - only FFT, 1 - only IFFT, else random
     constant MIN_PAUSE: integer := 1;
     constant MAX_PAUSE: integer := 10;
-    constant MAX_BLOCKS: integer := 10000;     -- blocks to simulate
+    constant MAX_BLOCKS: integer := 100;     -- blocks to simulate
     -----------------------------------------------------------
     -----------------------------------------------------------
     constant LOGLEN: integer := integer(log2(real(FFTlen)));
@@ -240,16 +239,18 @@ begin
             --report ">>>> Block #" & integer'image(blk);
             -- get pause duration after this block
             uniform_range(s1, s2, MIN_PAUSE, MAX_PAUSE, pause);
-            --uniform_range(s1, s2, 0, 2, inv);   -- inv is fft(0)/ifft(1) flag
             uniform_range(s1, s2, -5, 2, abort);   -- premature interruption flag
             uniform_range(s1, s2, 0, FFTlen-1, abort_idx);   -- last sample index, 0 to FFTlen-2
-            inv := 0;
+            inv := InvCtrl;
+            if InvCtrl /= 0 and InvCtrl /= 1 then
+                uniform_range(s1, s2, 0, 2, inv);   -- inv is fft(0)/ifft(1) flag
+            end if;
             -- generate block
             if inv = 0 then
                 x := gen_datavec_noise(FFTlen, 23169, s1, s2);
                 --x := gen_datavec(FFTlen);
             else
-                x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen/4, s1, s2);
+                x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen, s1, s2);
                 --x := gen_datavec(FFTlen);
             end if;
             xf := fft(x, inv, BitReversedInput, 1-inv);
@@ -261,7 +262,7 @@ begin
             fft_tr.fft_in := x;
             fft_tr.fft_out := xf;
             fft_tr.inv := inv;
-            fft_tr.abort := abort;
+            --fft_tr.abort := abort;
             fft_tr.abort_index := abort_idx;
             if fft_tr.abort <= 0 then
                 tr_queue.push(fft_tr);

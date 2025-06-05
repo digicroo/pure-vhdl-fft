@@ -4,9 +4,7 @@ use ieee.std_logic_unsigned.all;
 use ieee.std_logic_arith.conv_std_logic_vector;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
-use work.utils_pkg.all;
 use work.fft_sim_pkg.all;
-use work.LD_package.all;
 library std;
 use std.env.finish;
 
@@ -124,9 +122,10 @@ architecture testbench of TB_fft_ifft is
 
     type fft_transaction is record
         inv: integer;
-        fft_in: cplx_vec;
-        fft_out: cplx_vec;
-        scaling_sch: std_logic_vector;
+        fft_in: cplx_vec(0 to FFTlen-1);
+        fft_out: cplx_vec(0 to FFTlen-1);
+        abort: integer; -- flag that transaction is aborted (valid released before last sample), 0 or 1
+        abort_index: integer;   -- index of the last sample in the transaction if abort = 1
     end record;
 
     type transaction_array is array (integer range <>) of fft_transaction;
@@ -134,7 +133,8 @@ architecture testbench of TB_fft_ifft is
         inv => 0,
         fft_in => (0 to FFTlen-1 => (re=>0.0, im=>0.0)),
         fft_out => (0 to FFTlen-1 => (re=>0.0, im=>0.0)),
-        scaling_sch => (integer(log2(real(FFTlen)))-1 downto 0 => '0')
+        abort => 0,
+        abort_index => 0
     );
 
     type fft_tr_queue is protected
