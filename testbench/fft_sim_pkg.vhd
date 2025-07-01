@@ -14,6 +14,16 @@ package fft_sim_pkg is
         im: real;
     end record;
     type cplx_vec is array(integer range <>) of cplx;
+    
+    procedure uniform_range(
+        seed1, seed2: inout integer;
+        lo, hi: in integer;
+        u: out integer);
+    procedure generate_scaling_sch(
+        seed1,seed2: inout integer;
+        fftlen: in integer;
+        sch: out std_logic_vector;
+        total_scaling: out integer);
 
     function real2slv(x: real; width: integer) return std_logic_vector;
     function real2slv(x: real; width: integer; frac: integer) return std_logic_vector;
@@ -46,6 +56,42 @@ package fft_sim_pkg is
 end package fft_sim_pkg;
 
 package body fft_sim_pkg is
+
+    procedure uniform_range(
+        seed1, seed2: inout integer;
+        lo, hi: in integer; -- hi excluded
+        u: out integer) is
+        
+        variable ureal: real;
+    begin
+        uniform(seed1, seed2, ureal);
+        u := integer(floor(ureal * real(hi-lo) + real(lo)));
+    end procedure;
+    
+    procedure generate_scaling_sch(
+        seed1,seed2: inout integer;
+        fftlen: in integer;
+        sch: out std_logic_vector;
+        total_scaling: out integer) is
+        
+        constant STAGES: integer := integer(ceil(log2(real(fftlen))/2.0));
+        constant SCALING_LEN: integer := STAGES * 2;
+        variable res: std_logic_vector(SCALING_LEN-1 downto 0);
+        variable single_scl, total_scl: integer;
+    begin
+        total_scl := 1;
+        for k in 0 to STAGES-1 loop
+            if STAGES mod 2 /= 0 and k = STAGES-1 then
+                uniform_range(seed1, seed2, 0, 2, single_scl);   -- scaling for single stage from 0 to 1
+            else
+                uniform_range(seed1, seed2, 0, 3, single_scl);   -- scaling for single stage from 0 to 2
+            end if;
+            res(2*k+1 downto 2*k) := std_logic_vector(to_unsigned(single_scl, 2));
+            total_scl := total_scl * 2**single_scl;
+        end loop;
+        sch := res;
+        total_scaling := total_scl;
+    end procedure;
 
     -- convert real to std_logic_vector
     function real2slv(x: real; width: integer) return std_logic_vector is
@@ -277,8 +323,6 @@ package body fft_sim_pkg is
     end function;
     
     
-    
-    
     function re(a: cplx_vec) return real_vec is   -- get real part
         variable a_to: cplx_vec(0 to a'length-1) := a;
         variable res: real_vec(0 to a'length-1);
@@ -374,6 +418,7 @@ package body fft_sim_pkg is
         variable x: cplx_vec(0 to L-1) := idata;
         variable sm: cplx;
         variable st, ed, numfft, nhalf: integer := 0;    
+        variable invscale: real := 1.0 / real(scale);
     begin
         for stage in 0 to NSTAGES-1 loop
             numfft := 2**stage; -- number of sub-ffts
@@ -394,13 +439,22 @@ package body fft_sim_pkg is
             x := reorder(x);
         end if;
         
-        if scale /= 0 then
-            for k in 0 to L-1 loop
-                x(k).re := x(k).re / real(L);
-                x(k).im := x(k).im / real(L);
-            end loop;
-        end if;
+--        if scale /= 0 then
+--            for k in 0 to L-1 loop
+--                x(k).re := x(k).re / real(L);
+--                x(k).im := x(k).im / real(L);
+--            end loop;
+--        end if;
+
+        -- scaling
+        for k in 0 to L-1 loop
+            x(k).re := x(k).re * invscale;
+            x(k).im := x(k).im * invscale;
+        end loop;
+
         return x;
     end function;
+    
+    
 
 end package body fft_sim_pkg;

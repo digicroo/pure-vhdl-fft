@@ -25,13 +25,13 @@ entity r22_stage_pair is
         in_data_im: in std_logic_vector(DataWidth-1 downto 0);
         in_data_valid: in std_logic;     -- must be block-wise
         ifft_in: in std_logic;
-        scaling_sch_in: in std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
+        scaling_sch_in: in std_logic_vector(2*integer(ceil(log2(real(FFTlen))/2.0))-1 downto 0);
         
         out_data_re: out std_logic_vector(DataWidth-1 downto 0);
         out_data_im: out std_logic_vector(DataWidth-1 downto 0);
         out_data_valid: out std_logic;
         ifft_out: out std_logic;
-        scaling_sch_out: out std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
+        scaling_sch_out: out std_logic_vector(2*integer(ceil(log2(real(FFTlen))/2.0))-1 downto 0);
         
         cc_err: out std_logic_vector(1 downto 0)
     );
@@ -86,7 +86,7 @@ architecture rtl of r22_stage_pair is
     signal dly_bf2_out_im:  std_logic_vector(DataWidth+2-1 downto 0);
     signal dly_bf2_out_valid: std_logic;
     signal dly_bf2_ifft_out: std_logic;
-    signal dly_bf2_scaling: std_logic_vector(1 downto 0);
+    signal dly_bf2_scaling: std_logic_vector(SCALING_LEN-1 downto 0);
 
     signal tw_re, tw_im: std_logic_vector(TwiddleWidth-1 downto 0);
 
@@ -116,8 +116,8 @@ architecture rtl of r22_stage_pair is
     signal rounder_in_valid, rounder_out_valid: std_logic;
 
     signal scaling: std_logic_vector(1 downto 0);
-    signal bf1_scale_out: std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
-    signal bf2_scale_out: std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
+    signal bf1_scale_out: std_logic_vector(SCALING_LEN-1 downto 0);
+    signal bf2_scale_out: std_logic_vector(SCALING_LEN-1 downto 0);
 
 begin
 

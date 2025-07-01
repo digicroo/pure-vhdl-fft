@@ -17,16 +17,6 @@ end entity TB_fft;
 
 architecture testbench of TB_fft is
 
-    procedure uniform_range(
-        seed1, seed2: inout integer;
-        lo, hi: in integer;
-        u: out integer) is
-        variable ureal: real;
-    begin
-        uniform(seed1, seed2, ureal);
-        u := integer(floor(ureal * real(hi-lo) + real(lo)));
-    end procedure;
-
     function get_twiddle_num(re, im: real; nfft: integer) return integer is
         variable res: integer;
     begin
@@ -37,19 +27,21 @@ architecture testbench of TB_fft is
     
     function gen_datavec(len: integer) return cplx_vec is
         variable res: cplx_vec(0 to len-1);
-        variable f: real := 1.0/8.0;
+        variable f: real := -1.0/real(len);
     begin
         
         for k in res'range loop
             --res(k).re := real(k) * 100.0;
             --res(k).im := 0.0;
-            res(k).re := 0.0;
-            res(k).im := 0.0;
-            --res(k).re := round(32767.0/2.0 * cos(MATH_2_PI * f * real(k)));
-            --res(k).im := round(32767.0/2.0 * sin(MATH_2_PI * f * real(k)));
+            
+            --res(k).re := 0.0;
+            --res(k).im := 0.0;
+            
+            res(k).re := round(1000.0 * cos(MATH_2_PI * f * real(k)));
+            res(k).im := round(1000.0 * sin(MATH_2_PI * f * real(k)));
         end loop;
-        res(16).re := 32767.0;
-        res(16).im := 32767.0;
+        --res(16).re := 32767.0;
+        --res(16).im := 32767.0;
         return res;
     end function;
     
@@ -82,16 +74,17 @@ architecture testbench of TB_fft is
     -----------------------------------------------------------
     -----------------------------------------------------------
     constant DataWidth: integer := 16;
-    constant FFTlen: integer := 1024;
+    constant FFTlen: integer := 512;
     constant TwiddleWidth: integer := 18;
     constant BitReversedInput: integer := 1;
-    constant InvCtrl: integer := 1;    -- 0 - only FFT, 1 - only IFFT, else random
+    constant InvCtrl: integer := 0;    -- 0 - only FFT, 1 - only IFFT, else random
     constant MIN_PAUSE: integer := 1;
     constant MAX_PAUSE: integer := 10;
     constant MAX_BLOCKS: integer := 100;     -- blocks to simulate
     -----------------------------------------------------------
     -----------------------------------------------------------
     constant LOGLEN: integer := integer(log2(real(FFTlen)));
+    constant SCALING_SCH_LEN: integer := 2*integer(ceil(log2(real(FFTlen))/2.0));
 
     --other signals
     signal in_addr     : std_logic_vector(integer(ceil(log2(real(FFTlen))))-1 downto 0) := (others=>'0');
@@ -110,6 +103,7 @@ architecture testbench of TB_fft is
     signal out_data_valid : std_logic                                                       := '0';
     signal ifft_in, ifft_out: std_logic;
     signal cc_err_out     : std_logic;
+    signal scaling_sch    : std_logic_vector(SCALING_SCH_LEN-1 downto 0);
     
     --shared variable xf: cplx_vec(0 to FFTlen-1) := (others=>(re=>0.0, im=>0.0));
 --    signal fft_diff_re, fft_diff_im: std_logic_vector(DataWidth-1 downto 0);
@@ -126,6 +120,8 @@ architecture testbench of TB_fft is
         fft_out: cplx_vec(0 to FFTlen-1);
         abort: integer; -- flag that transaction is aborted (valid released before last sample), 0 or 1
         abort_index: integer;   -- index of the last sample in the transaction if abort = 1
+        scaling_sch: std_logic_vector(SCALING_SCH_LEN-1 downto 0);
+        total_scaling: integer;
     end record;
 
     type transaction_array is array (integer range <>) of fft_transaction;
@@ -134,7 +130,9 @@ architecture testbench of TB_fft is
         fft_in => (0 to FFTlen-1 => (re=>0.0, im=>0.0)),
         fft_out => (0 to FFTlen-1 => (re=>0.0, im=>0.0)),
         abort => 0,
-        abort_index => 0
+        abort_index => 0,
+        scaling_sch => (others=>'0'),
+        total_scaling => 1
     );
 
     type fft_tr_queue is protected
@@ -225,6 +223,8 @@ begin
         variable pause, inv, abort, abort_idx: integer;
         variable fft_tr: fft_transaction := NULL_TR;
         variable xf: cplx_vec(0 to FFTlen-1) := (others=>(re=>0.0, im=>0.0));
+        variable sch: std_logic_vector(SCALING_SCH_LEN-1 downto 0);
+        variable total_scaling: integer;
     begin
         s1 := 666;
         s2 := 900;
@@ -239,21 +239,30 @@ begin
             --report ">>>> Block #" & integer'image(blk);
             -- get pause duration after this block
             uniform_range(s1, s2, MIN_PAUSE, MAX_PAUSE, pause);
-            uniform_range(s1, s2, -5, 2, abort);   -- premature interruption flag
+            
+            
+            --uniform_range(s1, s2, -5, 2, abort);   -- premature interruption flag
+            abort := 0;
             uniform_range(s1, s2, 0, FFTlen-1, abort_idx);   -- last sample index, 0 to FFTlen-2
             inv := InvCtrl;
             if InvCtrl /= 0 and InvCtrl /= 1 then
                 uniform_range(s1, s2, 0, 2, inv);   -- inv is fft(0)/ifft(1) flag
             end if;
             -- generate block
-            if inv = 0 then
-                x := gen_datavec_noise(FFTlen, 23169, s1, s2);
-                --x := gen_datavec(FFTlen);
-            else
-                x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen, s1, s2);
-                --x := gen_datavec(FFTlen);
-            end if;
-            xf := fft(x, inv, BitReversedInput, 1-inv);
+--            if inv = 0 then
+--                x := gen_datavec_noise(FFTlen, 23169, s1, s2);
+--                --x := gen_datavec(FFTlen);
+--            else
+--                x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen, s1, s2);
+--                --x := gen_datavec(FFTlen);
+--            end if;
+
+            x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen, s1, s2);  -- noise
+            --x := gen_datavec(FFTlen); -- complex exponent
+            --generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
+            sch := "0110100101";
+            total_scaling := 2**7;
+            xf := fft(x, inv, BitReversedInput, total_scaling);
             if BitReversedInput > 0 then
                 x := reorder(x);    -- make input in bit-reversed order
             end if;
@@ -262,6 +271,8 @@ begin
             fft_tr.fft_in := x;
             fft_tr.fft_out := xf;
             fft_tr.inv := inv;
+            fft_tr.scaling_sch := sch;
+            fft_tr.total_scaling := total_scaling;
             --fft_tr.abort := abort;
             fft_tr.abort_index := abort_idx;
             if fft_tr.abort <= 0 then
@@ -270,6 +281,7 @@ begin
             -- send FFT block
             for k in x'range loop
                 in_data_valid <= '1';
+                scaling_sch <= fft_tr.scaling_sch;
                 if inv <= 0 then
                     ifft_in <= '0';
                 else
@@ -388,7 +400,7 @@ begin
     
     ----------------------------------------------------------------------------
 
-    UUT : entity work.fft2
+    UUT : entity work.fft
     generic map (
         DataWidth        => DataWidth,
         TwiddleWidth     => TwiddleWidth,
@@ -402,6 +414,7 @@ begin
         in_data_im     => in_data_im,
         in_data_valid  => in_data_valid,
         ifft_in        => ifft_in,
+        scaling_sch    => scaling_sch,
         out_data_re    => out_data_re,
         out_data_im    => out_data_im,
         out_data_valid => out_data_valid,

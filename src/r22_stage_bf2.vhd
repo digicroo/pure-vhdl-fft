@@ -25,12 +25,12 @@ entity r22_stage_bf2 is
         in_data_im: in std_logic_vector(DataWidth-1 downto 0);
         in_valid: in std_logic;     -- must be block-wise
         ifft_in: in std_logic;      -- must be block-wise
-        scale_in: in std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);     -- must be block-wise
+        scale_in: in std_logic_vector(2*integer(ceil(log2(real(FFTlen))/2.0))-1 downto 0);     -- must be block-wise
         out_data_re: out std_logic_vector(DataWidth-1 downto 0);
         out_data_im: out std_logic_vector(DataWidth-1 downto 0);
         out_valid: out std_logic;
         ifft_out: out std_logic;      -- must be block-wise
-        scale_out: out std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
+        scale_out: out std_logic_vector(2*integer(ceil(log2(real(FFTlen))/2.0))-1 downto 0);
         spl_cnt_out: out std_logic_vector(integer(log2(real(FFTlen)))-1 downto 0);  -- to twiddle gen
         cc_err: out std_logic
     );
@@ -80,7 +80,7 @@ architecture rtl of r22_stage_bf2 is
     signal dly_in_re, dly_in_im, dly_out_re, dly_out_im: std_logic_vector(DataWidth-1 downto 0);
     signal out_valid_i: std_logic;
     signal ifft_reg: std_logic;
-    signal scale_reg: std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
+    signal scale_reg: std_logic_vector(scale_in'length-1 downto 0);
     
 begin
     

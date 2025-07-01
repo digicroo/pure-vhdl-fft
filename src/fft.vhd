@@ -24,7 +24,7 @@ entity fft is
         in_data_im: in std_logic_vector(DataWidth-1 downto 0);
         in_data_valid: in std_logic;     -- must be block-wise
         ifft_in: in std_logic;
-        scaling_sch: in std_logic_vector(2*integer(ceil(log2(real(FFTlen)/2.0)))-1 downto 0);
+        scaling_sch: in std_logic_vector(2*integer(ceil(log2(real(FFTlen))/2.0))-1 downto 0);
         out_data_re: out std_logic_vector(DataWidth-1 downto 0);
         out_data_im: out std_logic_vector(DataWidth-1 downto 0);
         out_data_valid: out std_logic;
