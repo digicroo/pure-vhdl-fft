@@ -15,7 +15,8 @@ entity fft is
         TwiddleWidth: integer;
         MaxShiftRegDelay: integer := 64;
         FFTlen: integer;
-        BitReversedInput: integer
+        BitReversedInput: integer;
+        Nchannels: integer
     );
     port(
         clk: in std_logic;
@@ -77,7 +78,8 @@ begin
             MaxShiftRegDelay => MaxShiftRegDelay,
             FFTlen           => FFTlen,
             StagePairNum     => stage,
-            BitReversedInput => BitReversedInput
+            BitReversedInput => BitReversedInput,
+            Nchannels        => Nchannels
         )
         port map (
             clk             => clk,
@@ -117,6 +119,7 @@ begin
             DataWidth    => DataWidth+1,
             FFTlen       => FFTlen,
             BitReversedInput => BitReversedInput,
+            Nchannels        => Nchannels,
             StagePairNum => NUM_R22_STAGES
         )
         port map (

@@ -15,6 +15,7 @@ entity r22_stage_bf1 is
         FFTlen: integer;
         StagePairNum: integer;  -- 0 for 1st pair of stages, 1 for next pair, etc.
         BitReversedInput: integer;
+        Nchannels: integer;
         MaxShiftRegDelay: integer := 64
     );
     port(
@@ -62,6 +63,9 @@ architecture rtl of r22_stage_bf1 is
     signal out_valid_i: std_logic;
     signal ifft_reg: std_logic;
     signal scale_reg: std_logic_vector(scale_in'length-1 downto 0);
+
+    constant CH_CNT_W: integer := integer(ceil(log2(real(Nchannels))));
+    signal ch_cnt, vc_ch_cnt: unsigned(CH_CNT_W-1 downto 0);
     
 begin
 
@@ -109,54 +113,119 @@ begin
         if rising_edge(clk) then
             if reset = '1' then
                 cc <= (others=>'0');
+                ch_cnt <= (others=>'0');
             else
                 if in_valid = '0' then
                     cc <= (others=>'0');
                 else
-                    if cc = 0 then
-                        ifft_reg <= ifft_in;    -- latch with the 0th data sample
-                        scale_reg <= scale_in;
-                    end if;
-                    cc <= cc + 1;
-                end if;
-            end if;
-        end if;
-    end process;
-
-    valid_counter_proc: process(clk)
-    begin
-        if rising_edge(clk) then
-            if reset = '1' then
-                vc <= (others=>'0');
-                out_valid_i <= '0';
-            else
-                -- out_valid
-                if out_valid_i = '0' then
-                    if cc = OUT_VALID_START_TIME then
-                        out_valid_i <= '1';
-                        ifft_out <= ifft_reg;
-                        scale_out <= scale_reg;
-                    end if;
-                else
-                    if vc = FFTLEN_CUR-1 then
-                        if cc /= OUT_VALID_START_TIME then
-                            out_valid_i <= '0';
-                        else    -- no gap in in_valid
-                            ifft_out <= ifft_reg;
-                            scale_out <= scale_reg;
+                    if Nchannels = 1 then
+                        -- Single channel is a special case
+                        if cc = 0 then
+                            ifft_reg <= ifft_in;    -- latch with the 0th data sample
+                            scale_reg <= scale_in;
+                        end if;
+                        cc <= cc + 1;
+                    else
+                        -- Multi-channel
+                        if cc = 0 and ch_cnt = 0 then
+                            -- All channels are the same direction (FFT or IFFT) and scaling
+                            ifft_reg <= ifft_in;    -- latch with the 0th data sample of 0th channel
+                            scale_reg <= scale_in;
+                        end if;
+                        if ch_cnt /= Nchannels-1 then
+                            ch_cnt <= ch_cnt + 1;
+                        else
+                            ch_cnt <= (others=>'0');
+                            cc <= cc + 1;
                         end if;
                     end if;
                 end if;
-
-                -- valid counter
-                if out_valid_i = '0' then
-                    vc <= (others=>'0');
-                else
-                    vc <= vc + 1;
-                end if;
             end if;
         end if;
     end process;
+
+    -- Output valid generation for single channel mode
+    gen_valid_cnt_single: if Nchannels = 1 generate
+        valid_counter_proc: process(clk)
+        begin
+            if rising_edge(clk) then
+                if reset = '1' then
+                    vc <= (others=>'0');
+                    out_valid_i <= '0';
+                else
+                    -- out_valid
+                    if out_valid_i = '0' then
+                        if cc = OUT_VALID_START_TIME then
+                            out_valid_i <= '1';
+                            ifft_out <= ifft_reg;
+                            scale_out <= scale_reg;
+                        end if;
+                    else
+                        if vc = FFTLEN_CUR-1 then
+                            if cc /= OUT_VALID_START_TIME then
+                                out_valid_i <= '0';
+                            else    -- no gap in in_valid
+                                ifft_out <= ifft_reg;
+                                scale_out <= scale_reg;
+                            end if;
+                        end if;
+                    end if;
+
+                    -- valid counter
+                    if out_valid_i = '0' then
+                        vc <= (others=>'0');
+                    else
+                        vc <= vc + 1;
+                    end if;
+                end if;
+            end if;
+        end process;
+    end generate gen_valid_cnt_single;
+
+    -- Output valid generation for multichannel mode
+    gen_valid_cnt_multi: if Nchannels > 1 generate
+        valid_counter_proc: process(clk)
+        begin
+            if rising_edge(clk) then
+                if reset = '1' then
+                    vc <= (others=>'0');
+                    out_valid_i <= '0';
+                    vc_ch_cnt <= (others=>'0');
+                else
+                    -- out_valid
+                    if out_valid_i = '0' then
+                        if cc = OUT_VALID_START_TIME and vc_ch_cnt = Nchannels-1 then
+                            out_valid_i <= '1';
+                            ifft_out <= ifft_reg;
+                            scale_out <= scale_reg;
+                        end if;
+                    else
+                        if vc = FFTLEN_CUR-1 and vc_ch_cnt = Nchannels-1 then
+                            if cc /= OUT_VALID_START_TIME and ch_cnt = Nchannels-1 then
+                                out_valid_i <= '0';
+                            else    -- no gap in in_valid
+                                ifft_out <= ifft_reg;
+                                scale_out <= scale_reg;
+                            end if;
+                        end if;
+                    end if;
+
+                    -- valid counter
+                    if out_valid_i = '0' then
+                        vc <= (others=>'0');
+                        vc_ch_cnt <= (others=>'0');
+                    else
+                        if vc_ch_cnt /= Nchannels-1 then
+                            vc_ch_cnt <= vc_ch_cnt + 1;
+                        else
+                            vc_ch_cnt <= (others=>'0');
+                            vc <= vc + 1;
+                        end if;
+                    end if;
+                end if;
+            end if;
+        end process;
+    end generate gen_valid_cnt_multi;
 
     out_valid <= out_valid_i;
     cc_err <= '1' when (in_valid = '0' and reset = '0' and cc /= 0) else '0';

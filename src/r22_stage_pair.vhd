@@ -15,7 +15,8 @@ entity r22_stage_pair is
         MaxShiftRegDelay: integer := 64;
         FFTlen: integer;
         StagePairNum: integer;  -- 0 for 1st pair of stages, 1 for next pair, etc.
-        BitReversedInput: integer
+        BitReversedInput: integer;
+        Nchannels: integer
     );
     port(
         clk: in std_logic;
@@ -136,6 +137,7 @@ begin
         DataWidth    => DataWidth+1,
         FFTlen       => FFTlen,
         BitReversedInput => BitReversedInput,
+        Nchannels => Nchannels,
         StagePairNum => StagePairNum,
         MaxShiftRegDelay => MaxShiftRegDelay
     )
@@ -164,6 +166,7 @@ begin
         DataWidth    => DataWidth+2,
         FFTlen       => FFTlen,
         BitReversedInput => BitReversedInput,
+        Nchannels => Nchannels,
         StagePairNum => StagePairNum,
         MaxShiftRegDelay => MaxShiftRegDelay
     )
