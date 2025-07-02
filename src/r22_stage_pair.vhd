@@ -60,6 +60,10 @@ architecture rtl of r22_stage_pair is
     constant SCALE_BITS: integer := 2;  -- FFT scaling 2 bits per pair
     constant SCALING_LEN: integer := scaling_sch_in'length;
 
+    constant MUL_INW_TW: integer := 18;     -- multiplier input width (twiddles)
+    constant MUL_INW_DATA: integer := 24;    -- multiplier input width (data)
+    constant MUL_OUTW: integer := MUL_INW_TW + MUL_INW_DATA + 1;    -- multiplier out width
+
     signal bf1_in_re:       std_logic_vector(DataWidth downto 0);
     signal bf1_in_im:       std_logic_vector(DataWidth downto 0);
     signal bf1_in_valid:    std_logic;
@@ -90,13 +94,13 @@ architecture rtl of r22_stage_pair is
 
     signal tw_re, tw_im: std_logic_vector(TwiddleWidth-1 downto 0);
 
-    signal mul_in_re1: std_logic_vector(23 downto 0);
-    signal mul_in_im1: std_logic_vector(23 downto 0);
-    signal mul_in_re2: std_logic_vector(17 downto 0);
-    signal mul_in_im2: std_logic_vector(17 downto 0);
+    signal mul_in_re1: std_logic_vector(MUL_INW_DATA-1 downto 0);
+    signal mul_in_im1: std_logic_vector(MUL_INW_DATA-1 downto 0);
+    signal mul_in_re2: std_logic_vector(MUL_INW_TW-1 downto 0);
+    signal mul_in_im2: std_logic_vector(MUL_INW_TW-1 downto 0);
     signal mul_in_valid: std_logic;
-    signal mul_out_re: std_logic_vector(42 downto 0);
-    signal mul_out_im: std_logic_vector(42 downto 0);
+    signal mul_out_re: std_logic_vector(MUL_OUTW-1 downto 0);
+    signal mul_out_im: std_logic_vector(MUL_OUTW-1 downto 0);
     signal mul_out_valid: std_logic;
     signal mul_ifft_out: std_logic;
     signal mul_user_in, mul_user_out: std_logic_vector(SCALING_LEN+1-1 downto 0);
@@ -225,10 +229,10 @@ begin
             out_data_im => tw_im
         );
 
-        mul_in_re1 <= std_logic_vector(resize(signed(dly_bf2_out_re), 24));
-        mul_in_im1 <= std_logic_vector(resize(signed(dly_bf2_out_im), 24));
-        mul_in_re2 <= std_logic_vector(resize(signed(tw_re), mul_in_re2'length));
-        mul_in_im2 <= std_logic_vector(resize(signed(tw_im), mul_in_im2'length));
+        mul_in_re1 <= std_logic_vector(resize(signed(dly_bf2_out_re), MUL_INW_DATA));
+        mul_in_im1 <= std_logic_vector(resize(signed(dly_bf2_out_im), MUL_INW_DATA));
+        mul_in_re2 <= std_logic_vector(resize(signed(tw_re), MUL_INW_TW));
+        mul_in_im2 <= std_logic_vector(resize(signed(tw_im), MUL_INW_TW));
         mul_in_valid <= dly_bf2_out_valid;
 
         mul_user_in <= dly_bf2_scaling & dly_bf2_ifft_out;

@@ -24,6 +24,7 @@ entity fft2 is
         in_data_im: in std_logic_vector(DataWidth-1 downto 0);
         in_data_valid: in std_logic;     -- must be block-wise
         ifft_in: in std_logic;
+        scaling_sch: in std_logic_vector(2*integer(ceil(log2(real(FFTlen))/2.0))-1 downto 0);
         out_data_re: out std_logic_vector(DataWidth-1 downto 0);
         out_data_im: out std_logic_vector(DataWidth-1 downto 0);
         out_data_valid: out std_logic;
@@ -39,16 +40,19 @@ architecture rtl of fft2 is
     constant LOGLEN: integer := integer(round(log2(real(FFTlen))));
     constant NUM_R22_STAGES: integer := LOGLEN / 2;
     constant NUM_R2_STAGES: integer := LOGLEN mod 2;    -- insert a radix-2 stage if FFTlen is an odd power of 2
+    constant SCALING_LEN: integer := scaling_sch'length;
     constant NUM_STAGES_TOTAL: integer := NUM_R22_STAGES + NUM_R2_STAGES;
     constant EXTRA_BITS_LAST_STAGE: integer := 2;   -- max TwiddleWidth
 
     type invec is array(integer range<>) of std_logic_vector(DataWidth-1 downto 0);
     type outvec is array(integer range<>) of std_logic_vector(DataWidth+TwiddleWidth-1 downto 0);
+    type scaling_vecvec is array(integer range<>) of std_logic_vector(SCALING_LEN-1 downto 0);
     signal idata_vec_re, idata_vec_im: invec(0 to NUM_R22_STAGES);
     signal odata_vec_re, odata_vec_im: outvec(0 to NUM_R22_STAGES);
     signal ivalid_vec, ifft_in_vec: std_logic_vector(0 to NUM_R22_STAGES);
     signal ovalid_vec, ifft_out_vec: std_logic_vector(0 to NUM_R22_STAGES);
     signal cc_err_vec: std_logic_vector(2*NUM_R22_STAGES downto 0) := (others=>'0'); -- leftmost bit is always zero if FFTlen is an even power of 2
+    signal scaling_in_vec, scaling_out_vec: scaling_vecvec(0 to NUM_R22_STAGES);
 
     signal idata_fin_re: std_logic_vector(DataWidth+EXTRA_BITS_LAST_STAGE-1  downto 0);
     signal idata_fin_im: std_logic_vector(DataWidth+EXTRA_BITS_LAST_STAGE-1  downto 0);
@@ -61,9 +65,13 @@ architecture rtl of fft2 is
     signal dovesochek_out_data_re, dovesochek_out_data_im: std_logic_vector(DataWidth+EXTRA_BITS_LAST_STAGE+1-1 downto 0);
     signal dovesochek_in_valid, dovesochek_out_valid: std_logic;
     signal dovesochek_in_ifft, dovesochek_out_ifft: std_logic;
+    signal dovesochek_in_scaling, dovesochek_out_scaling: std_logic_vector(SCALING_LEN-1 downto 0);
     
     signal dovesochek_rounder_in_re, dovesochek_rounder_in_im: std_logic_vector(DataWidth+EXTRA_BITS_LAST_STAGE+1-1 downto 0);
     signal dovesochek_rounder_in_valid: std_logic;
+
+    signal scaling_in_fin: std_logic_vector(SCALING_LEN-1 downto 0);
+    signal scaling: std_logic_vector(1 downto 0);
     
 begin
 
@@ -71,6 +79,7 @@ begin
     idata_vec_im(0) <= in_data_im;
     ivalid_vec(0) <= in_data_valid;
     ifft_in_vec(0) <= ifft_in;
+    scaling_in_vec(0) <= scaling_sch;
 
     -- generate all r2^2 stages except the last one
     r22_stages_gen:
@@ -85,17 +94,19 @@ begin
             BitReversedInput => BitReversedInput
         )
         port map (
-            clk            => clk,
-            reset          => reset,
-            in_data_re     => idata_vec_re(stage),
-            in_data_im     => idata_vec_im(stage),
-            in_data_valid  => ivalid_vec(stage),
-            ifft_in        => ifft_in_vec(stage),
-            out_data_re    => odata_vec_re(stage),
-            out_data_im    => odata_vec_im(stage),
-            out_data_valid => ovalid_vec(stage),
-            ifft_out       => ifft_out_vec(stage),
-            cc_err         => cc_err_vec(2*stage+1 downto 2*stage)
+            clk             => clk,
+            reset           => reset,
+            in_data_re      => idata_vec_re(stage),
+            in_data_im      => idata_vec_im(stage),
+            in_data_valid   => ivalid_vec(stage),
+            ifft_in         => ifft_in_vec(stage),
+            scaling_sch_in  => scaling_in_vec(stage),
+            out_data_re     => odata_vec_re(stage),
+            out_data_im     => odata_vec_im(stage),
+            out_data_valid  => ovalid_vec(stage),
+            ifft_out        => ifft_out_vec(stage),
+            scaling_sch_out => scaling_out_vec(stage),
+            cc_err          => cc_err_vec(2*stage+1 downto 2*stage)
         );
 
         gen_rounder_nonbeforelast: if stage /= NUM_STAGES_TOTAL-2 generate
@@ -117,6 +128,7 @@ begin
             );
 
             ifft_in_vec(stage+1) <= ifft_out_vec(stage) when rising_edge(clk);
+            scaling_in_vec(stage+1) <= scaling_out_vec(stage) when rising_edge(clk);
         end generate gen_rounder_nonbeforelast;
     end generate r22_stages_gen;
 
@@ -127,6 +139,7 @@ begin
         idata_fin_im <= odata_vec_im(NUM_STAGES_TOTAL-2)(DataWidth+TwiddleWidth-1 downto TwiddleWidth - EXTRA_BITS_LAST_STAGE);
         ivalid_fin <= ovalid_vec(NUM_STAGES_TOTAL-2);
         ifft_in_fin <= ifft_out_vec(NUM_STAGES_TOTAL-2);
+        scaling_in_fin <= scaling_out_vec(NUM_STAGES_TOTAL-2);
 
         r22_pair_last : entity work.r22_stage_pair2
         generic map (
@@ -144,10 +157,12 @@ begin
             in_data_im     => idata_fin_im,
             in_data_valid  => ivalid_fin,
             ifft_in        => ifft_in_fin,
+            scaling_sch_in => scaling_in_fin,
             out_data_re    => odata_fin_re,
             out_data_im    => odata_fin_im,
             out_data_valid => ovalid_fin,
             ifft_out       => ifft_out_fin,
+            scaling_sch_out => open,
             cc_err         => cc_err_vec(2*NUM_STAGES_TOTAL-1 downto 2*NUM_STAGES_TOTAL-2)
         );
 
@@ -181,6 +196,7 @@ begin
             odata_vec_im(NUM_STAGES_TOTAL-2)(DataWidth+TwiddleWidth-1 downto TwiddleWidth - EXTRA_BITS_LAST_STAGE);
         dovesochek_in_valid <= ovalid_vec(NUM_STAGES_TOTAL-2);
         dovesochek_in_ifft <= ifft_out_vec(NUM_STAGES_TOTAL-2);
+        dovesochek_in_scaling <= scaling_out_vec(NUM_STAGES_TOTAL-2);
 
         dovesochek_stage : entity work.r22_stage_bf1
         generic map (
@@ -196,18 +212,27 @@ begin
             in_data_im  => dovesochek_in_data_im,
             in_valid    => dovesochek_in_valid,
             ifft_in     => dovesochek_in_ifft,
+            scale_in    => dovesochek_in_scaling,
             out_data_re => dovesochek_out_data_re,
             out_data_im => dovesochek_out_data_im,
             out_valid   => dovesochek_out_valid,
             ifft_out    => dovesochek_out_ifft,
+            scale_out   => dovesochek_out_scaling,
             cc_err      => cc_err_vec(cc_err_vec'high)
         );
         
-        dovesochek_rounder_in_re <= dovesochek_out_data_re when dovesochek_out_ifft = '0' else dovesochek_out_data_re(DataWidth+EXTRA_BITS_LAST_STAGE-1 downto 0) & '0';
-        dovesochek_rounder_in_im <= dovesochek_out_data_im when dovesochek_out_ifft = '0' else dovesochek_out_data_im(DataWidth+EXTRA_BITS_LAST_STAGE-1 downto 0) & '0';
+        scaling <= dovesochek_out_scaling(SCALING_LEN-1 downto SCALING_LEN-2);
+        --dovesochek_rounder_in_re <= dovesochek_out_data_re when dovesochek_out_ifft = '0' else dovesochek_out_data_re(DataWidth+EXTRA_BITS_LAST_STAGE-1 downto 0) & '0';
+        --dovesochek_rounder_in_im <= dovesochek_out_data_im when dovesochek_out_ifft = '0' else dovesochek_out_data_im(DataWidth+EXTRA_BITS_LAST_STAGE-1 downto 0) & '0';
+
+        -- Scaling for the last stage can be only 00 or 01 when FFTlen is an odd power of 2. Values 10 and 11 are treated as 01.
+        dovesochek_rounder_in_re <= dovesochek_out_data_re(DataWidth+EXTRA_BITS_LAST_STAGE-1 downto 0) & '0' when scaling = "00" else dovesochek_out_data_re;
+        dovesochek_rounder_in_im <= dovesochek_out_data_im(DataWidth+EXTRA_BITS_LAST_STAGE-1 downto 0) & '0' when scaling = "00" else dovesochek_out_data_im;
+        --dovesochek_rounder_in_re <= dovesochek_out_data_re(DataWidth-1 downto 0) & '0' when scaling = "00" else dovesochek_out_data_re;
+        --dovesochek_rounder_in_im <= dovesochek_out_data_im(DataWidth-1 downto 0) & '0' when scaling = "00" else dovesochek_out_data_im;
         dovesochek_rounder_in_valid <= dovesochek_out_valid;
 
-        dovesochek_rounder_re : entity work.rounder_away_opt_cplx
+        dovesochek_rounder : entity work.rounder_away_opt_cplx
         generic map (
             InWidth => DataWidth+EXTRA_BITS_LAST_STAGE+1,
             OutWidth => DataWidth,

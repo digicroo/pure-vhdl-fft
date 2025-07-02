@@ -74,7 +74,7 @@ architecture testbench of TB_fft is
     -----------------------------------------------------------
     -----------------------------------------------------------
     constant DataWidth: integer := 16;
-    constant FFTlen: integer := 512;
+    constant FFTlen: integer := 1024;
     constant TwiddleWidth: integer := 18;
     constant BitReversedInput: integer := 1;
     constant InvCtrl: integer := 0;    -- 0 - only FFT, 1 - only IFFT, else random
@@ -259,9 +259,10 @@ begin
 
             x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen, s1, s2);  -- noise
             --x := gen_datavec(FFTlen); -- complex exponent
-            --generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
-            sch := "0110100101";
-            total_scaling := 2**7;
+            generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
+            --sch := "0110100101";
+            --sch := "0110101010";
+            --total_scaling := 2**9;
             xf := fft(x, inv, BitReversedInput, total_scaling);
             if BitReversedInput > 0 then
                 x := reorder(x);    -- make input in bit-reversed order
@@ -400,7 +401,7 @@ begin
     
     ----------------------------------------------------------------------------
 
-    UUT : entity work.fft
+    UUT : entity work.fft2
     generic map (
         DataWidth        => DataWidth,
         TwiddleWidth     => TwiddleWidth,

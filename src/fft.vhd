@@ -80,19 +80,19 @@ begin
             BitReversedInput => BitReversedInput
         )
         port map (
-            clk            => clk,
-            reset          => reset,
-            in_data_re     => data_vec_re(stage),
-            in_data_im     => data_vec_im(stage),
-            in_data_valid  => valid_vec(stage),
-            ifft_in        => ifft_vec(stage),
-            scaling_sch_in => scaling_vec(stage),
-            out_data_re    => data_vec_re(stage+1),
-            out_data_im    => data_vec_im(stage+1),
-            out_data_valid => valid_vec(stage+1),
-            ifft_out       => ifft_vec(stage+1),
+            clk             => clk,
+            reset           => reset,
+            in_data_re      => data_vec_re(stage),
+            in_data_im      => data_vec_im(stage),
+            in_data_valid   => valid_vec(stage),
+            ifft_in         => ifft_vec(stage),
+            scaling_sch_in  => scaling_vec(stage),
+            out_data_re     => data_vec_re(stage+1),
+            out_data_im     => data_vec_im(stage+1),
+            out_data_valid  => valid_vec(stage+1),
+            ifft_out        => ifft_vec(stage+1),
             scaling_sch_out => scaling_vec(stage+1),
-            cc_err         => cc_err_vec(2*stage+1 downto 2*stage)
+            cc_err          => cc_err_vec(2*stage+1 downto 2*stage)
         );        
     end generate;
 
@@ -142,7 +142,7 @@ begin
         dovesochek_rounder_in_im <= dovesochek_out_data_im(DataWidth-1 downto 0) & '0' when scaling = "00" else dovesochek_out_data_im;
         dovesochek_rounder_in_valid <= dovesochek_out_valid;
 
-        dovesochek_rounder_re : entity work.rounder_away_opt_cplx
+        dovesochek_rounder : entity work.rounder_away_opt_cplx
         generic map (
             InWidth  => DataWidth+1,
             OutWidth => DataWidth,
