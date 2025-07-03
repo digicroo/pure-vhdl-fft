@@ -45,6 +45,20 @@ architecture testbench of TB_fft is
         return res;
     end function;
     
+    function gen_datavec_test_nch(fftlen, nchan: integer) return cplx_vec is
+        variable res: cplx_vec(0 to nchan*fftlen-1);
+        variable cnt: real;
+    begin
+        cnt := 1.0;
+        for k in res'range loop
+            res(k).re := cnt;
+            res(k).im := 0.0;
+            
+            cnt := cnt + 1.0;
+        end loop;
+        return res;
+    end function;
+    
     function gen_datavec_noise(len: integer; maxval: integer; s1,s2:integer) return cplx_vec is
     -- len - length of the resulting array
     -- maxval - values are constrained to +-maxval
@@ -74,9 +88,10 @@ architecture testbench of TB_fft is
     -----------------------------------------------------------
     -----------------------------------------------------------
     constant DataWidth: integer := 16;
-    constant FFTlen: integer := 1024;
+    constant FFTlen: integer := 512;
     constant TwiddleWidth: integer := 18;
     constant BitReversedInput: integer := 1;
+    constant Nchannels: integer := 3;
     constant InvCtrl: integer := 0;    -- 0 - only FFT, 1 - only IFFT, else random
     constant MIN_PAUSE: integer := 1;
     constant MAX_PAUSE: integer := 10;
@@ -116,8 +131,8 @@ architecture testbench of TB_fft is
 
     type fft_transaction is record
         inv: integer;
-        fft_in: cplx_vec(0 to FFTlen-1);
-        fft_out: cplx_vec(0 to FFTlen-1);
+        fft_in: cplx_vec(0 to Nchannels*FFTlen-1);
+        fft_out: cplx_vec(0 to Nchannels*FFTlen-1);
         abort: integer; -- flag that transaction is aborted (valid released before last sample), 0 or 1
         abort_index: integer;   -- index of the last sample in the transaction if abort = 1
         scaling_sch: std_logic_vector(SCALING_SCH_LEN-1 downto 0);
@@ -127,8 +142,8 @@ architecture testbench of TB_fft is
     type transaction_array is array (integer range <>) of fft_transaction;
     constant NULL_TR: fft_transaction := (
         inv => 0,
-        fft_in => (0 to FFTlen-1 => (re=>0.0, im=>0.0)),
-        fft_out => (0 to FFTlen-1 => (re=>0.0, im=>0.0)),
+        fft_in => (0 to Nchannels*FFTlen-1 => (re=>0.0, im=>0.0)),
+        fft_out => (0 to Nchannels*FFTlen-1 => (re=>0.0, im=>0.0)),
         abort => 0,
         abort_index => 0,
         scaling_sch => (others=>'0'),
@@ -218,11 +233,11 @@ begin
     -----------------------------------------------------------
     TB_proc : process
         variable cnt: integer := 0;
-        variable x: cplx_vec(0 to FFTlen-1) := (others=>(re=>0.0, im=>0.0));
+        variable x: cplx_vec(0 to Nchannels*FFTlen-1) := (others=>(re=>0.0, im=>0.0));
         variable s1, s2: integer;
         variable pause, inv, abort, abort_idx: integer;
         variable fft_tr: fft_transaction := NULL_TR;
-        variable xf: cplx_vec(0 to FFTlen-1) := (others=>(re=>0.0, im=>0.0));
+        variable xf: cplx_vec(0 to Nchannels*FFTlen-1) := (others=>(re=>0.0, im=>0.0));
         variable sch: std_logic_vector(SCALING_SCH_LEN-1 downto 0);
         variable total_scaling: integer;
     begin
@@ -257,15 +272,18 @@ begin
 --                --x := gen_datavec(FFTlen);
 --            end if;
 
-            x := gen_datavec_noise(FFTlen, (2**DataWidth)/FFTlen, s1, s2);  -- noise
+            x := gen_datavec_noise(Nchannels*FFTlen, (2**DataWidth)/FFTlen*16, s1, s2);  -- noise
             --x := gen_datavec(FFTlen); -- complex exponent
-            generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
+            --x := gen_datavec_test_nch(FFTlen, Nchannels); -- saw
+            --generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
             --sch := "0110100101";
             --sch := "0110101010";
-            --total_scaling := 2**9;
-            xf := fft(x, inv, BitReversedInput, total_scaling);
+            total_scaling := FFTlen;
+            sch := get_scaling_sch(FFTlen, total_scaling);
+            --xf := fft(x, inv, BitReversedInput, total_scaling);
+            xf := fft_multich(x, Nchannels, inv, BitReversedInput, total_scaling);
             if BitReversedInput > 0 then
-                x := reorder(x);    -- make input in bit-reversed order
+                x := reorder(x, Nchannels);    -- make input in bit-reversed order
             end if;
             -- push transaction to queue
             fft_tr := NULL_TR;
@@ -320,7 +338,7 @@ begin
     fft_check_proc : process
         variable stop: boolean := false;
         variable fft_ix, out_blk_ix: integer := 0;
-        variable fft_out, fft_diff: cplx_vec(0 to FFTlen-1);
+        variable fft_out, fft_diff: cplx_vec(0 to Nchannels*FFTlen-1);
         variable tr: fft_transaction := NULL_TR;
         variable max_max_err, cur_max_err: real;
         variable mean_mean_err_re, mean_mean_err_im, cur_mean_err_re, cur_mean_err_im: real;
@@ -352,7 +370,7 @@ begin
                 
                 fft_out(fft_ix).re := slv2real(out_data_re);
                 fft_out(fft_ix).im := slv2real(out_data_im);
-                if (fft_ix = FFTlen-1) then
+                if (fft_ix = Nchannels*FFTlen-1) then
                     -- last out sample ---------------------------------
                     fft_diff := fft_out - tr.fft_out;
                     -- max err
@@ -380,7 +398,7 @@ begin
                 fft_diff_re := slv2real(out_data_re) - fft_tru_re;
                 fft_diff_im := slv2real(out_data_im) - fft_tru_im;
                 
-                fft_ix := (fft_ix + 1) mod FFTlen;
+                fft_ix := (fft_ix + 1) mod (Nchannels*FFTlen);
                 stop := (out_blk_ix = MAX_BLOCKS) or (blocks_sent and tr_queue.is_empty);
                 
             end if;
@@ -401,12 +419,13 @@ begin
     
     ----------------------------------------------------------------------------
 
-    UUT : entity work.fft2
+    UUT : entity work.fft
     generic map (
         DataWidth        => DataWidth,
         TwiddleWidth     => TwiddleWidth,
         FFTlen           => FFTlen,
-        BitReversedInput => BitReversedInput
+        BitReversedInput => BitReversedInput,
+        Nchannels        => Nchannels
     )
     port map (
         clk            => clk,

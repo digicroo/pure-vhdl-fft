@@ -24,6 +24,9 @@ package fft_sim_pkg is
         fftlen: in integer;
         sch: out std_logic_vector;
         total_scaling: out integer);
+        
+    function get_scaling_sch(fftlen, total_scaling: integer) return std_logic_vector;
+    function min(a,b: integer) return integer;
 
     function real2slv(x: real; width: integer) return std_logic_vector;
     function real2slv(x: real; width: integer; frac: integer) return std_logic_vector;
@@ -34,6 +37,7 @@ package fft_sim_pkg is
     function reverse(num: integer; nbits: integer) return integer;
     function reorder(idata: real_vec) return real_vec;  -- bit-reversed to natural reordering (and vise versa)
     function reorder(idata: cplx_vec) return cplx_vec;
+    function reorder(idata: cplx_vec; nchan: integer) return cplx_vec;
     function tw(n, fftlen, ifft: integer) return cplx;
     function "+"(a,b: cplx) return cplx;
     function "-"(a,b: cplx) return cplx;
@@ -52,6 +56,7 @@ package fft_sim_pkg is
     function max_index(a: real_vec) return integer;
     function mean(a: real_vec) return real;
     function fft(idata: cplx_vec; inv, reord, scale: integer) return cplx_vec;
+    function fft_multich(x: cplx_vec; n_chan: integer; inv, reord, scale: integer) return cplx_vec;
     
 end package fft_sim_pkg;
 
@@ -68,6 +73,7 @@ package body fft_sim_pkg is
         u := integer(floor(ureal * real(hi-lo) + real(lo)));
     end procedure;
     
+    -- generate random valid scaling schedule
     procedure generate_scaling_sch(
         seed1,seed2: inout integer;
         fftlen: in integer;
@@ -92,6 +98,38 @@ package body fft_sim_pkg is
         sch := res;
         total_scaling := total_scl;
     end procedure;
+    
+    -- generate scaling schedule from fft length and desired scaling factor
+    function get_scaling_sch(fftlen, total_scaling: integer) return std_logic_vector is
+        constant LOGLEN: integer := integer(log2(real(fftlen)));
+        constant STAGES: integer := integer(ceil(log2(real(fftlen))/2.0));
+        constant SCALING_LEN: integer := STAGES * 2;
+        variable res: std_logic_vector(SCALING_LEN-1 downto 0);
+        variable scale_rem: integer := integer(log2(real(total_scaling)));    -- remaining scaling
+        variable scale_cur: integer;    -- scaling for current stage
+    begin
+        for k in STAGES-1 downto 0 loop
+            if k = STAGES-1 then    -- last stage
+                if LOGLEN mod 2 /= 0 then   -- odd number of stages, last stage scaling must be 0 or 1
+                    scale_cur := min(scale_rem, 1);
+                else    -- last stage scaling can be 0, 1 or 2
+                    scale_cur := min(scale_rem, 2);
+                end if;
+            else    -- non-last stage
+                scale_cur := min(scale_rem, 2);
+            end if;
+            res(2*k+1 downto 2*k) := std_logic_vector(to_unsigned(scale_cur, 2));
+            scale_rem := scale_rem - scale_cur;
+        end loop;
+        return res;
+    end function;
+    
+    function min(a,b: integer) return integer is
+    begin
+        if a > b then return b;
+        else return a;
+        end if;
+    end;
 
     -- convert real to std_logic_vector
     function real2slv(x: real; width: integer) return std_logic_vector is
@@ -193,26 +231,50 @@ package body fft_sim_pkg is
         return to_integer(res_u);
     end function;
 
-    function reorder(idata: real_vec) return real_vec is    -- idata must be 0 to
+    function reorder(idata: real_vec) return real_vec is
+        variable idatato: real_vec(0 to idata'length-1) := idata;
         constant L: integer := idata'length;
         constant NBITS: integer := clog2(L);
         variable res: real_vec(0 to L-1);
     begin
         for k in 0 to L-1 loop
-            res(k) := idata(reverse(k, NBITS));
+            res(k) := idatato(reverse(k, NBITS));
         end loop;
         return res;
     end function;
 
-    function reorder(idata: cplx_vec) return cplx_vec is    -- idata must be 0 to
+    function reorder(idata: cplx_vec) return cplx_vec is
+        variable idatato: cplx_vec(0 to idata'length-1) := idata;
         constant L: integer := idata'length;
         constant NBITS: integer := clog2(L);
         variable res: cplx_vec(0 to L-1);
     begin
         for k in 0 to L-1 loop
-            --res(k).re := idata(reverse(k, NBITS)).re;
-            --res(k).im := idata(reverse(k, NBITS)).im;
-            res(k) := idata(reverse(k, NBITS));
+            res(k) := idatato(reverse(k, NBITS));
+        end loop;
+        return res;
+    end function;
+    
+    function reorder(idata: cplx_vec; nchan: integer) return cplx_vec is    -- idata length must be a multiple of nchan
+        variable idatato: cplx_vec(0 to idata'length-1) := idata;
+        constant L: integer := idata'length;
+        constant L1: integer := L / nchan;
+        constant NBITS: integer := clog2(L1);
+        variable res: cplx_vec(0 to L-1);
+        variable buf: cplx_vec(0 to L1-1);
+    begin
+        
+        for ch in 0 to nchan-1 loop
+            -- get all data for current channel
+            for k in 0 to L1-1 loop
+                buf(k) := idatato(k*nchan + ch);
+            end loop;
+            -- reorder single channel
+            buf := reorder(buf);
+            -- write reordered to res
+            for k in 0 to L1-1 loop
+                res(k*nchan + ch) := buf(k);
+            end loop;
         end loop;
         return res;
     end function;
@@ -453,6 +515,28 @@ package body fft_sim_pkg is
         end loop;
 
         return x;
+    end function;
+    
+    -- calculate output for multichannel fft
+    function fft_multich(x: cplx_vec; n_chan: integer; inv, reord, scale: integer) return cplx_vec is
+        variable xto: cplx_vec(0 to x'length-1) := x;
+        variable res: cplx_vec(0 to x'length-1);
+        constant fftlen: integer := x'length / n_chan;
+        variable buf_single: cplx_vec(0 to fftlen-1);
+    begin
+        for ch in 0 to n_chan-1 loop
+            -- get fft input for current channel ch
+            for k in 0 to fftlen-1 loop
+                buf_single(k) := xto(n_chan*k + ch);
+            end loop;
+            -- calc fft
+            buf_single := fft(buf_single, inv, reord, scale);
+            -- put fft output to res
+            for k in 0 to fftlen-1 loop
+                res(n_chan*k + ch) := buf_single(k);
+            end loop;
+        end loop;
+        return res;
     end function;
     
     

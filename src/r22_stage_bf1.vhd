@@ -52,7 +52,7 @@ architecture rtl of r22_stage_bf1 is
 
     constant FFTLEN_CUR: integer := get_subfft_len(FFTlen, StagePairNum, BitReversedInput);   -- length of sub-fft for current stage
     constant BF_LATENCY: integer := 1;
-    constant DELAY_LEN: integer := FFTLEN_CUR / 2 - BF_LATENCY;
+    constant DELAY_LEN: integer := Nchannels * FFTLEN_CUR / 2 - BF_LATENCY;
     constant DELAY_USERAM: integer := DELAY_LEN - MaxShiftRegDelay;
     constant CCW: integer := integer(log2(real(FFTLEN_CUR)));    -- control counter width
     constant OUT_VALID_START_TIME: integer := FFTLEN_CUR / 2 - 1 + BF_LATENCY;
@@ -96,6 +96,7 @@ begin
     delay_line : entity work.delay_line_fft
     generic map (
         Delay       => DELAY_LEN,
+        Nchannels   => 1,
         InDataWidth => 2*DataWidth,
         UseRAM      => DELAY_USERAM
     )
@@ -194,14 +195,14 @@ begin
                 else
                     -- out_valid
                     if out_valid_i = '0' then
-                        if cc = OUT_VALID_START_TIME and vc_ch_cnt = Nchannels-1 then
+                        if cc = OUT_VALID_START_TIME and ch_cnt = 0 then
                             out_valid_i <= '1';
                             ifft_out <= ifft_reg;
                             scale_out <= scale_reg;
                         end if;
                     else
                         if vc = FFTLEN_CUR-1 and vc_ch_cnt = Nchannels-1 then
-                            if cc /= OUT_VALID_START_TIME and ch_cnt = Nchannels-1 then
+                            if cc /= OUT_VALID_START_TIME or ch_cnt /= 0 then
                                 out_valid_i <= '0';
                             else    -- no gap in in_valid
                                 ifft_out <= ifft_reg;

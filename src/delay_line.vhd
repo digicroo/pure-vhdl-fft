@@ -11,6 +11,7 @@ use ieee.math_real.all;
 entity delay_line_fft is
     generic(
         Delay: integer;
+        Nchannels: integer := 1;
         InDataWidth: integer;
         UseRAM: integer     -- 0 or 1. In RAM mode in_valid doesn't matterout_valid is always high 
     );
@@ -41,11 +42,11 @@ architecture rtl of delay_line_fft is
 
     type t_dl is array(integer range <>) of std_logic_vector(InDataWidth downto 0);
 
-    signal dl: t_dl(Delay-1 downto 0);
+    signal dl: t_dl(Nchannels*Delay-1 downto 0);
     signal dl_in: std_logic_vector(InDataWidth downto 0);
 
     -- ram mode
-    constant ADDRW: integer := clog2_nonneg(Delay);
+    constant ADDRW: integer := clog2_nonneg(Nchannels * Delay);
     constant RAMLEN: integer := 2**ADDRW;
     signal wp, rp: unsigned(ADDRW-1 downto 0);
     type t_ram is array(integer range <>) of std_logic_vector(InDataWidth-1 downto 0);
@@ -63,8 +64,8 @@ begin
     gen_shiftreg: if Delay > 0 and UseRAM <= 0 generate
     begin
         dl_in <= in_valid & in_data;
-        out_data <= dl(Delay-1)(InDataWidth-1 downto 0);
-        out_valid <= dl(Delay-1)(InDataWidth);
+        out_data <= dl(dl'left)(InDataWidth-1 downto 0);
+        out_valid <= dl(dl'left)(InDataWidth);
         
         sr_proc : process(clk)
         begin
@@ -72,7 +73,7 @@ begin
                 if reset = '1' then
                     dl <= (others=>(others=>'0'));
                 else
-                    dl <= dl(Delay-2 downto 0) & dl_in;
+                    dl <= dl(dl'left-1 downto 0) & dl_in;
                 end if;
             end if;
         end process;
