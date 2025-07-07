@@ -64,6 +64,7 @@ proc getutil { params } {
 
     # run synth + implementation
     set_property generic "$generic_string" [current_fileset]
+    # set_property generic "DataWidth=16 TwiddleWidth=18 MaxShiftRegDelay=256 FFTlen=4096 BitReversedInput=0 Nchannels=1 UseFFT2=0" [current_fileset]
     reset_run synth_1
     launch_runs impl_1 -jobs 4
     wait_on_run impl_1
