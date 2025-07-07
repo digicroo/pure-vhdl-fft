@@ -92,8 +92,8 @@ architecture testbench of TB_fft is
     constant TwiddleWidth: integer := 18;
     constant BitReversedInput: integer := 1;
     constant Nchannels: integer := 3;
-    constant InvCtrl: integer := 0;    -- 0 - only FFT, 1 - only IFFT, else random
-    constant MIN_PAUSE: integer := 1;
+    constant InvCtrl: integer := 2;    -- 0 - only FFT, 1 - only IFFT, else random
+    constant MIN_PAUSE: integer := 0;
     constant MAX_PAUSE: integer := 10;
     constant MAX_BLOCKS: integer := 100;     -- blocks to simulate
     -----------------------------------------------------------
@@ -272,14 +272,14 @@ begin
 --                --x := gen_datavec(FFTlen);
 --            end if;
 
-            x := gen_datavec_noise(Nchannels*FFTlen, (2**DataWidth)/FFTlen*16, s1, s2);  -- noise
+            x := gen_datavec_noise(Nchannels*FFTlen, (2**DataWidth)/FFTlen, s1, s2);  -- noise
             --x := gen_datavec(FFTlen); -- complex exponent
             --x := gen_datavec_test_nch(FFTlen, Nchannels); -- saw
-            --generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
+            generate_scaling_sch(s1,s2, FFTlen, sch, total_scaling);
             --sch := "0110100101";
             --sch := "0110101010";
-            total_scaling := FFTlen;
-            sch := get_scaling_sch(FFTlen, total_scaling);
+            --total_scaling := FFTlen;
+            --sch := get_scaling_sch(FFTlen, total_scaling);
             --xf := fft(x, inv, BitReversedInput, total_scaling);
             xf := fft_multich(x, Nchannels, inv, BitReversedInput, total_scaling);
             if BitReversedInput > 0 then
@@ -419,7 +419,7 @@ begin
     
     ----------------------------------------------------------------------------
 
-    UUT : entity work.fft
+    UUT : entity work.fft2
     generic map (
         DataWidth        => DataWidth,
         TwiddleWidth     => TwiddleWidth,

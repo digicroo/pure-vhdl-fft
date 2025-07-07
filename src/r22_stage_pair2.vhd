@@ -16,6 +16,7 @@ entity r22_stage_pair2 is
         FFTlen: integer;
         StagePairNum: integer;  -- 0 for 1st pair of stages, 1 for next pair, etc.
         BitReversedInput: integer;
+        Nchannels: integer;
         Debug: boolean := false
     );
     port(
@@ -134,6 +135,7 @@ begin
         DataWidth    => DataWidth+1,
         FFTlen       => FFTlen,
         BitReversedInput => BitReversedInput,
+        Nchannels => Nchannels,
         StagePairNum => StagePairNum,
         MaxShiftRegDelay => MaxShiftRegDelay
     )
@@ -162,6 +164,7 @@ begin
         DataWidth    => DataWidth+2,
         FFTlen       => FFTlen,
         BitReversedInput => BitReversedInput,
+        Nchannels => Nchannels,
         StagePairNum => StagePairNum,
         MaxShiftRegDelay => MaxShiftRegDelay
     )

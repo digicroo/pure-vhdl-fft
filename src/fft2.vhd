@@ -15,7 +15,8 @@ entity fft2 is
         TwiddleWidth: integer;
         MaxShiftRegDelay: integer := 64;
         FFTlen: integer;
-        BitReversedInput: integer
+        BitReversedInput: integer;
+        Nchannels: integer
     );
     port(
         clk: in std_logic;
@@ -91,7 +92,8 @@ begin
             MaxShiftRegDelay => MaxShiftRegDelay,
             FFTlen           => FFTlen,
             StagePairNum     => stage,
-            BitReversedInput => BitReversedInput
+            BitReversedInput => BitReversedInput,
+            Nchannels        => Nchannels
         )
         port map (
             clk             => clk,
@@ -148,7 +150,8 @@ begin
             MaxShiftRegDelay => MaxShiftRegDelay,
             FFTlen           => FFTlen,
             StagePairNum     => NUM_STAGES_TOTAL-1,
-            BitReversedInput => BitReversedInput
+            BitReversedInput => BitReversedInput,
+            Nchannels        => Nchannels
         )
         port map (
             clk            => clk,
@@ -200,10 +203,11 @@ begin
 
         dovesochek_stage : entity work.r22_stage_bf1
         generic map (
-            DataWidth    => DataWidth+EXTRA_BITS_LAST_STAGE+1,
-            FFTlen       => FFTlen,
+            DataWidth        => DataWidth+EXTRA_BITS_LAST_STAGE+1,
+            FFTlen           => FFTlen,
             BitReversedInput => BitReversedInput,
-            StagePairNum => NUM_R22_STAGES
+            Nchannels        => Nchannels,
+            StagePairNum     => NUM_R22_STAGES
         )
         port map (
             clk         => clk,
